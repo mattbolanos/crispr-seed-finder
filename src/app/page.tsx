@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import { SeedFinderForm } from "@/components/seed-finder-form";
+import { SeedFinderPage } from "@/components/seed-finder-page";
 
 export default function Home() {
   return (
     <Suspense fallback={null}>
-      <SeedFinderForm />
+      <SeedFinderPage />
     </Suspense>
   );
 }

@@ -1,89 +1,29 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { DownloadIcon, ExternalLinkIcon, SearchIcon } from "lucide-react";
 import { parseAsInteger, parseAsString, useQueryState } from "nuqs";
-import { useState } from "react";
-import { DnaInput } from "@/components/dna-input";
-import { SeedLengthSlider } from "@/components/seed-length-slider";
-import { Button } from "@/components/ui/button";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { Separator } from "@/components/ui/separator";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  type SearchHistoryEntry,
+  type SeedMatchesRequest,
+  upsertSearchHistoryEntry,
+} from "@/components/search-history";
+import { SeedFinderIntro } from "@/components/seed-finder/intro";
+import { SeedFinderResults } from "@/components/seed-finder/results";
+import { SeedFinderSearchControls } from "@/components/seed-finder/search-controls";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   isDnaValid,
   isSeedLengthSupported,
-  type SeedMatch,
   type SeedMatchesResponse,
 } from "@/lib/seed-search";
 
-interface SeedMatchesRequest {
-  sequence: string;
-  minSeed: number;
+interface SubmittedSearch extends SeedMatchesRequest {
+  runId: string;
 }
 
-function formatGenomicLocation(match: SeedMatch, k: number) {
-  const start = match.pos + 1;
-  const end = match.pos + k;
-
-  return `${match.chrom}:${start}-${end}`;
-}
-
-function buildUcscLink(match: SeedMatch, k: number) {
-  const start = Math.max(1, match.pos + 1 - 100);
-  const end = match.pos + k + 100;
-
-  return `https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=${encodeURIComponent(
-    `${match.chrom}:${start}-${end}`,
-  )}`;
-}
-
-function escapeCsvCell(value: string | number) {
-  const normalized = String(value);
-
-  if (!/[",\n]/.test(normalized)) {
-    return normalized;
-  }
-
-  return `"${normalized.replaceAll('"', '""')}"`;
-}
-
-function buildCsv(data: SeedMatchesResponse) {
-  const rows = [
-    ["gene", "genomic location", "strand", "distance to TSS", "UCSC link"],
-    ...data.matches.map((match) => [
-      match.gene,
-      formatGenomicLocation(match, data.minSeed),
-      match.strand,
-      Math.abs(match.dist_to_tss),
-      buildUcscLink(match, data.minSeed),
-    ]),
-  ];
-
-  return rows
-    .map((row) => row.map((cell) => escapeCsvCell(cell)).join(","))
-    .join("\n");
+function createSearchRunId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 async function searchSeedMatches({
@@ -109,7 +49,15 @@ async function searchSeedMatches({
   return (await response.json()) as SeedMatchesResponse;
 }
 
-export function SeedFinderForm() {
+interface SeedFinderFormProps {
+  restoredEntry: SearchHistoryEntry | null;
+  onSearchCompleted: (entry: SearchHistoryEntry) => void;
+}
+
+export function SeedFinderForm({
+  restoredEntry,
+  onSearchCompleted,
+}: SeedFinderFormProps) {
   const [sequence, setSequence] = useQueryState(
     "sequence",
     parseAsString.withDefault(""),
@@ -119,13 +67,17 @@ export function SeedFinderForm() {
     parseAsInteger.withDefault(9),
   );
   const [submittedSearch, setSubmittedSearch] =
-    useState<SeedMatchesRequest | null>(null);
+    useState<SubmittedSearch | null>(null);
+  const [displayedResults, setDisplayedResults] =
+    useState<SeedMatchesResponse | null>(restoredEntry?.response ?? null);
+  const completedRunIdsRef = useRef<Set<string>>(new Set());
 
   const resultsQuery = useQuery({
     queryKey: [
       "seed-matches",
       submittedSearch?.sequence ?? null,
       submittedSearch?.minSeed ?? null,
+      submittedSearch?.runId ?? null,
     ],
     queryFn: () => {
       if (!submittedSearch) {
@@ -138,215 +90,87 @@ export function SeedFinderForm() {
     staleTime: 5 * 60 * 1000,
   });
 
+  useEffect(() => {
+    if (!submittedSearch || !resultsQuery.data) {
+      return;
+    }
+
+    if (completedRunIdsRef.current.has(submittedSearch.runId)) {
+      return;
+    }
+
+    const entry: SearchHistoryEntry = {
+      id: submittedSearch.runId,
+      createdAt: new Date().toISOString(),
+      request: {
+        sequence: submittedSearch.sequence,
+        minSeed: submittedSearch.minSeed,
+      },
+      response: resultsQuery.data,
+    };
+
+    completedRunIdsRef.current.add(submittedSearch.runId);
+    upsertSearchHistoryEntry(entry);
+    setDisplayedResults(resultsQuery.data);
+    onSearchCompleted(entry);
+  }, [onSearchCompleted, resultsQuery.data, submittedSearch]);
+
+  useEffect(() => {
+    if (!restoredEntry) {
+      return;
+    }
+
+    void setSequence(restoredEntry.request.sequence);
+    void setSeedLength(restoredEntry.request.minSeed);
+    setSubmittedSearch(null);
+    setDisplayedResults(restoredEntry.response);
+  }, [restoredEntry, setSeedLength, setSequence]);
+
   const isReady = isDnaValid(sequence) && isSeedLengthSupported(seedLength);
-  const results = resultsQuery.data;
-  const queryKmers = results?.kmers.join(", ") ?? "";
-  const csvHref = results
-    ? `data:text/csv;charset=utf-8,${encodeURIComponent(buildCsv(results))}`
-    : "";
+  const results = submittedSearch
+    ? (resultsQuery.data ?? displayedResults)
+    : displayedResults;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!isReady) {
+      return;
+    }
+
+    setDisplayedResults(null);
+    setSubmittedSearch({
+      sequence,
+      minSeed: seedLength,
+      runId: createSearchRunId(),
+    });
+  }
 
   return (
     <div className="flex flex-col items-center justify-center">
       <Card className="w-full max-w-5xl">
-        <CardHeader className="text-center">
-          <CardDescription className="font-mono text-xs tracking-widest uppercase">
-            CRISPR Analysis
-          </CardDescription>
-          <CardTitle className="text-2xl">Seed Finder Tool</CardTitle>
-          <CardDescription>
-            PAM-proximal seed matches in TSS regions
-          </CardDescription>
-          <div className="text-muted-foreground mt-4 space-y-3 text-left text-sm">
-            <p className="text-foreground font-semibold">
-              Cas9 guide RNA seed matches near TSS loci
-            </p>
-            <p>
-              Seed sequences are identified by searching +/-1,000 bp of
-              annotated transcription start sites (TSS) using the human
-              reference genome hg38. Only perfect matches are considered. Seed
-              matches are reported for MANE TSSs which are protein coding.
-              Seed-mediated off-target activity at non-protein coding
-              transcripts may also result in off-target effects. The seed
-              matches for a given seed match length include all seed matches
-              equal to or greater than that length (eg if a seed match is 13 bp,
-              it will also appear under 12 bp seed matches). All reported seed
-              matches are adjacent to an &apos;NGG&apos; Cas9 PAM sequence.
-            </p>
-            <p>
-              While off-target seed matches may apply to enzymatically active
-              Cas9, our analysis focused on seed-mediated off-targets
-              specifically with KRAB-dCas9 (CRISPRi), while other seed-mediated
-              off-target work has utilized CRISPRa systems.
-            </p>
-            <p>
-              You can read more in our preprint{" "}
-              <a
-                className="text-primary underline hover:no-underline"
-                href="https://biorxiv.org"
-                target="_blank"
-                rel="noreferrer"
-              >
-                here
-              </a>{" "}
-              (TODO: update when preprint out) and run the described method
-              yourself{" "}
-              <a
-                className="text-primary underline hover:no-underline"
-                href="https://github.com/AustinHartman/perturb_seed"
-                target="_blank"
-                rel="noreferrer"
-              >
-                here
-              </a>
-              .
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-8">
-          <form
-            className="space-y-10"
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (!isReady) {
-                return;
-              }
-
-              setSubmittedSearch({
-                sequence,
-                minSeed: seedLength,
-              });
+        <SeedFinderIntro />
+        <CardContent className="space-y-6">
+          <SeedFinderSearchControls
+            isReady={isReady}
+            isSearching={resultsQuery.isFetching}
+            seedLength={seedLength}
+            sequence={sequence}
+            onSeedLengthChange={(value) => {
+              void setSeedLength(value);
             }}
-          >
-            <SeedLengthSlider
-              value={seedLength}
-              onChange={(value) => {
-                void setSeedLength(value);
-              }}
-            />
-            <DnaInput
-              value={sequence}
-              onChange={(value) => {
-                void setSequence(value);
-              }}
-              seedLength={seedLength}
-            />
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full"
-              disabled={!isReady || resultsQuery.isFetching}
-            >
-              {resultsQuery.isFetching ? <Spinner /> : <SearchIcon />}
-              {resultsQuery.isFetching ? "Searching..." : "Find Seeds"}
-            </Button>
-          </form>
+            onSequenceChange={(value) => {
+              void setSequence(value);
+            }}
+            onSubmit={handleSubmit}
+          />
           {resultsQuery.isError && (
             <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border px-4 py-3 text-sm">
               {resultsQuery.error.message}
             </div>
           )}
-          {results && (
-            <section className="flex flex-col gap-4">
-              <Separator />
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">
-                    {results.matches.length} seed match
-                    {results.matches.length === 1 ? "" : "es"}
-                  </p>
-                  <p className="text-muted-foreground font-mono text-xs">
-                    Query k-mer{results.kmers.length === 1 ? "" : "s"}:{" "}
-                    {queryKmers} from {results.sequence}
-                  </p>
-                </div>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  disabled={results.matches.length === 0}
-                >
-                  <a
-                    href={csvHref}
-                    download={`seed-matches-k${results.minSeed}-${results.kmers.join("-")}.csv`}
-                  >
-                    <DownloadIcon data-icon="inline-start" />
-                    Download CSV
-                  </a>
-                </Button>
-              </div>
-              {results.matches.length === 0 ? (
-                <Empty className="border-border/60 bg-muted/20 rounded-xl border py-10">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <SearchIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>No seed matches</EmptyTitle>
-                    <EmptyDescription>
-                      No matches were found for the {results.minSeed}-bp genomic
-                      seed{results.kmers.length === 1 ? "" : "s"} {queryKmers}.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 rounded-tl-xl px-4 py-3 backdrop-blur">
-                        Gene
-                      </TableHead>
-                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
-                        Seed Match Locus
-                      </TableHead>
-                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
-                        TSS Locus
-                      </TableHead>
-
-                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
-                        Distance to TSS
-                      </TableHead>
-
-                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 rounded-tr-xl px-4 py-3 backdrop-blur">
-                        UCSC
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {results.matches.map((match, index) => (
-                      <TableRow
-                        key={`${match.gene}-${match.chrom}-${match.pos}-${index}`}
-                      >
-                        <TableCell className="px-4 py-3 font-medium">
-                          {match.gene}
-                        </TableCell>
-                        <TableCell className="px-4 py-3 font-mono text-xs tabular-nums">
-                          {formatGenomicLocation(match, results.minSeed)}
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-xs tabular-nums">
-                          {match.tss}
-                        </TableCell>
-                        <TableCell className="px-4 py-3 tabular-nums">
-                          {Math.abs(match.dist_to_tss)}
-                        </TableCell>
-
-                        <TableCell className="px-4 py-3">
-                          <a
-                            className="text-primary inline-flex items-center gap-1 hover:underline"
-                            href={buildUcscLink(match, results.minSeed)}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open
-                            <ExternalLinkIcon className="size-3" />
-                          </a>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </section>
-          )}
+          <SeedFinderResults results={results} />
         </CardContent>
       </Card>
     </div>
