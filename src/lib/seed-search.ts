@@ -1,4 +1,4 @@
-import { DNA_REGEX, REQUIRED_LENGTH } from "@/lib/dna";
+import { DNA_REGEX, REQUIRED_LENGTH, reverseComplement } from "@/lib/dna";
 
 export const MIN_SEED_LENGTH = 6;
 export const MAX_SEED_LENGTH = 12;
@@ -38,7 +38,7 @@ export function isSeedLengthSupported(value: number) {
 }
 
 export function buildSeedKmer(sequence: string, minSeed: number) {
-  return sequence.slice(0, minSeed);
+  return reverseComplement(sequence).slice(0, minSeed);
 }
 
 export function isDnaValid(value: string) {

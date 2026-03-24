@@ -1,8 +1,9 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
-import { Download, ExternalLink, Search } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { DownloadIcon, ExternalLinkIcon, SearchIcon } from "lucide-react";
 import { parseAsInteger, parseAsString, useQueryState } from "nuqs";
+import { useState } from "react";
 import { DnaInput } from "@/components/dna-input";
 import { SeedLengthSlider } from "@/components/seed-length-slider";
 import { Button } from "@/components/ui/button";
@@ -10,12 +11,28 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   isDnaValid,
+  isSeedLengthSupported,
   type SeedMatch,
   type SeedMatchesResponse,
 } from "@/lib/seed-search";
@@ -100,13 +117,28 @@ export function SeedFinderForm() {
     "seedLength",
     parseAsInteger.withDefault(8)
   );
+  const [submittedSearch, setSubmittedSearch] =
+    useState<SeedMatchesRequest | null>(null);
 
-  const searchMutation = useMutation({
-    mutationFn: searchSeedMatches,
+  const resultsQuery = useQuery({
+    queryKey: [
+      "seed-matches",
+      submittedSearch?.sequence ?? null,
+      submittedSearch?.minSeed ?? null,
+    ],
+    queryFn: () => {
+      if (!submittedSearch) {
+        throw new Error("No search has been submitted.");
+      }
+
+      return searchSeedMatches(submittedSearch);
+    },
+    enabled: submittedSearch !== null,
+    staleTime: 5 * 60 * 1000,
   });
 
-  const isReady = isDnaValid(sequence);
-  const results = searchMutation.data;
+  const isReady = isDnaValid(sequence) && isSeedLengthSupported(seedLength);
+  const results = resultsQuery.data;
   const csvHref = results
     ? `data:text/csv;charset=utf-8,${encodeURIComponent(buildCsv(results))}`
     : "";
@@ -128,32 +160,42 @@ export function SeedFinderForm() {
             className="space-y-10"
             onSubmit={(event) => {
               event.preventDefault();
-
+              event.stopPropagation();
               if (!isReady) {
                 return;
               }
 
-              searchMutation.mutate({
+              setSubmittedSearch({
                 sequence,
                 minSeed: seedLength,
               });
             }}
           >
-            <SeedLengthSlider value={seedLength} onChange={setSeedLength} />
-            <DnaInput value={sequence} onChange={setSequence} />
+            <SeedLengthSlider
+              value={seedLength}
+              onChange={(value) => {
+                void setSeedLength(value);
+              }}
+            />
+            <DnaInput
+              value={sequence}
+              onChange={(value) => {
+                void setSequence(value);
+              }}
+            />
             <Button
               type="submit"
               size="lg"
               className="w-full"
-              disabled={!isReady || searchMutation.isPending}
+              disabled={!isReady || resultsQuery.isFetching}
             >
-              <Search data-icon="inline-start" />
-              {searchMutation.isPending ? "Searching..." : "Find Seeds"}
+              {resultsQuery.isFetching ? <Spinner /> : <SearchIcon />}
+              {resultsQuery.isFetching ? "Searching..." : "Find Seeds"}
             </Button>
           </form>
-          {searchMutation.isError && (
+          {resultsQuery.isError && (
             <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {searchMutation.error.message}
+              {resultsQuery.error.message}
             </div>
           )}
           {results && (
@@ -178,73 +220,81 @@ export function SeedFinderForm() {
                     href={csvHref}
                     download={`seed-matches-k${results.minSeed}-${results.kmer}.csv`}
                   >
-                    <Download data-icon="inline-start" />
+                    <DownloadIcon data-icon="inline-start" />
                     Download CSV
                   </a>
                 </Button>
               </div>
               {results.matches.length === 0 ? (
-                <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-6 text-sm text-muted-foreground">
-                  No matches were found for this {results.minSeed}-bp seed.
-                </div>
+                <Empty className="rounded-xl border border-border/60 bg-muted/20 py-10">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <SearchIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>No seed matches</EmptyTitle>
+                    <EmptyDescription>
+                      No matches were found for the {results.minSeed}-bp genomic
+                      seed {results.kmer}.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : (
-                <div className="overflow-hidden rounded-xl border border-border/60">
-                  <div className="max-h-[30rem] overflow-auto">
-                    <table className="min-w-full border-collapse text-left text-sm">
-                      <thead className="sticky top-0 bg-card/95 backdrop-blur">
-                        <tr className="border-b border-border/60">
-                          <th className="px-4 py-3 font-medium">Gene</th>
-                          <th className="px-4 py-3 font-medium">
-                            Genomic location
-                          </th>
-                          <th className="px-4 py-3 font-medium">Strand</th>
-                          <th className="px-4 py-3 font-medium">
-                            Distance to TSS
-                          </th>
-                          <th className="px-4 py-3 font-medium">UCSC</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {results.matches.map((match, index) => (
-                          <tr
-                            key={`${match.gene}-${match.chrom}-${match.pos}-${index}`}
-                            className="border-b border-border/40 last:border-b-0"
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="rounded-tl-xl sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                        Gene
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                        Genomic location
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                        Strand
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                        Distance to TSS
+                      </TableHead>
+                      <TableHead className="rounded-tr-xl sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                        UCSC
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.matches.map((match, index) => (
+                      <TableRow
+                        key={`${match.gene}-${match.chrom}-${match.pos}-${index}`}
+                      >
+                        <TableCell className="px-4 py-3 font-medium">
+                          {match.gene}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 font-mono text-xs">
+                          {formatGenomicLocation(match, results.minSeed)}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          {match.strand}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 tabular-nums">
+                          {match.dist_to_tss}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <a
+                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                            href={buildUcscLink(match, results.minSeed)}
+                            target="_blank"
+                            rel="noreferrer"
                           >
-                            <td className="px-4 py-3 font-medium">
-                              {match.gene}
-                            </td>
-                            <td className="px-4 py-3 font-mono text-xs">
-                              {formatGenomicLocation(match, results.minSeed)}
-                            </td>
-                            <td className="px-4 py-3">{match.strand}</td>
-                            <td className="px-4 py-3 tabular-nums">
-                              {match.dist_to_tss}
-                            </td>
-                            <td className="px-4 py-3">
-                              <a
-                                className="inline-flex items-center gap-1 text-primary hover:underline"
-                                href={buildUcscLink(match, results.minSeed)}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open
-                                <ExternalLink className="size-3" />
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                            Open
+                            <ExternalLinkIcon className="size-3" />
+                          </a>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </section>
           )}
         </CardContent>
-        <CardFooter className="justify-center border-t border-border/40 pt-4 text-xs text-muted-foreground">
-          Searching the exact {seedLength}-bp prefix of the 20-bp guide against
-          the precomputed R2 shard index.
-        </CardFooter>
       </Card>
     </div>
   );

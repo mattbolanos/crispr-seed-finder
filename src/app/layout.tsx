@@ -28,7 +28,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="m-auto max-w-2xl dark">
+      <body className="m-auto max-w-3xl dark">
         <Providers>
           <main className="relative min-h-screen p-6 pt-20 md:p-16 md:pt-20">
             {/* Decorative DNA strand accent */}
