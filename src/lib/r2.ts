@@ -1,7 +1,7 @@
 import { gunzipSync } from "node:zlib";
 import { GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
 import {
-  buildSeedKmer,
+  buildSeedKmers,
   type SeedMatch,
   type SeedMatchesResponse,
   SHARD_PREFIX_LENGTH,
@@ -104,15 +104,42 @@ export async function findSeedMatches(
   sequence: string,
   minSeed: number,
 ): Promise<SeedMatchesResponse> {
-  const kmer = buildSeedKmer(sequence, minSeed);
-  const prefix5 = kmer.slice(0, SHARD_PREFIX_LENGTH);
-  const shard = await fetchKmerShard(minSeed, prefix5);
+  const kmers = buildSeedKmers(sequence, minSeed);
+  const prefixes5 = kmers.map((kmer) => kmer.slice(0, SHARD_PREFIX_LENGTH));
+  const shardEntries = await Promise.all(
+    kmers.map(async (kmer, index) => ({
+      kmer,
+      shard: await fetchKmerShard(minSeed, prefixes5[index]),
+    })),
+  );
+  const seenMatches = new Set<string>();
+  const matches: SeedMatch[] = [];
+
+  for (const { kmer, shard } of shardEntries) {
+    for (const match of shard?.[kmer] ?? []) {
+      const matchKey = [
+        match.gene,
+        match.chrom,
+        match.pos,
+        match.strand,
+        match.tss,
+        match.dist_to_tss,
+      ].join(":");
+
+      if (seenMatches.has(matchKey)) {
+        continue;
+      }
+
+      seenMatches.add(matchKey);
+      matches.push(match);
+    }
+  }
 
   return {
     sequence,
     minSeed,
-    kmer,
-    prefix5,
-    matches: shard?.[kmer] ?? [],
+    kmers,
+    prefixes5,
+    matches,
   };
 }

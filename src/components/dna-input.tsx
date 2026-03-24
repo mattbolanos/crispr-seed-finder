@@ -13,12 +13,20 @@ const NUCLEOTIDE_COLORS: Record<string, string> = {
   G: "text-amber-400",
 };
 
+const NUCLEOTIDE_UNDERLINES: Record<string, string> = {
+  A: "decoration-emerald-400/60",
+  T: "decoration-rose-400/60",
+  C: "decoration-sky-400/60",
+  G: "decoration-amber-400/60",
+};
+
 interface DnaInputProps {
   value: string;
   onChange: (value: string) => void;
+  seedLength: number;
 }
 
-export function DnaInput({ value, onChange }: DnaInputProps) {
+export function DnaInput({ value, onChange, seedLength }: DnaInputProps) {
   const isValidChars = value.length === 0 || DNA_REGEX.test(value);
   const [touched, setTouched] = useState(false);
 
@@ -51,21 +59,32 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
       />
       {/* Colored nucleotide preview */}
 
-      <div className="flex gap-[2px] px-1" aria-hidden>
-        {value.split("").map((char, i) => (
-          <span
-            key={`${i}-${char}`}
-            className={cn(
-              "font-mono text-xs font-bold transition-all duration-200",
-              NUCLEOTIDE_COLORS[char] || "text-muted-foreground",
-            )}
-            style={{
-              animationDelay: `${i * 30}ms`,
-            }}
-          >
-            {char}
-          </span>
-        ))}
+      <div className="flex items-center gap-[2px] px-1" aria-hidden>
+        <span className="text-muted-foreground mr-1 font-mono text-xs">
+          5&apos; —
+        </span>
+        {value.split("").map((char, i) => {
+          const isSeed = i < seedLength;
+          return (
+            <span
+              key={`${i}-${char}`}
+              className={cn(
+                "font-mono text-xs font-bold transition-all duration-200",
+                NUCLEOTIDE_COLORS[char] || "text-muted-foreground",
+                isSeed &&
+                  cn(
+                    "underline decoration-2 underline-offset-4",
+                    NUCLEOTIDE_UNDERLINES[char] || "decoration-muted-foreground",
+                  ),
+              )}
+              style={{
+                animationDelay: `${i * 30}ms`,
+              }}
+            >
+              {char.replace("T", "U")}
+            </span>
+          );
+        })}
         {Array.from({ length: REQUIRED_LENGTH - value.length }).map((_, i) => (
           <span
             key={`empty-${i.toString()}`}
@@ -74,6 +93,12 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
             -
           </span>
         ))}
+        <span className="text-muted-foreground/40 ml-1 font-mono text-xs font-bold">
+          NGG
+        </span>
+        <span className="text-muted-foreground ml-1 font-mono text-xs">
+          — 3&apos;
+        </span>
       </div>
 
       <div className="h-4">

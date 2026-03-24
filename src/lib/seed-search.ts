@@ -1,7 +1,7 @@
 import { DNA_REGEX, REQUIRED_LENGTH, reverseComplement } from "@/lib/dna";
 
 export const MIN_SEED_LENGTH = 6;
-export const MAX_SEED_LENGTH = 12;
+export const MAX_SEED_LENGTH = 15;
 export const SHARD_PREFIX_LENGTH = 5;
 
 export interface SeedMatch {
@@ -16,8 +16,8 @@ export interface SeedMatch {
 export interface SeedMatchesResponse {
   sequence: string;
   minSeed: number;
-  kmer: string;
-  prefix5: string;
+  kmers: string[];
+  prefixes5: string[];
   matches: SeedMatch[];
 }
 
@@ -37,8 +37,11 @@ export function isSeedLengthSupported(value: number) {
   );
 }
 
-export function buildSeedKmer(sequence: string, minSeed: number) {
-  return reverseComplement(sequence).slice(0, minSeed);
+export function buildSeedKmers(sequence: string, minSeed: number) {
+  const pamProximalSeed = sequence.slice(-minSeed);
+  const kmers = [reverseComplement(pamProximalSeed), pamProximalSeed];
+
+  return Array.from(new Set(kmers));
 }
 
 export function isDnaValid(value: string) {

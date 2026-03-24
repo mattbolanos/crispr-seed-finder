@@ -76,7 +76,7 @@ function buildCsv(data: SeedMatchesResponse) {
       match.gene,
       formatGenomicLocation(match, data.minSeed),
       match.strand,
-      match.dist_to_tss,
+      Math.abs(match.dist_to_tss),
       buildUcscLink(match, data.minSeed),
     ]),
   ];
@@ -116,7 +116,7 @@ export function SeedFinderForm() {
   );
   const [seedLength, setSeedLength] = useQueryState(
     "seedLength",
-    parseAsInteger.withDefault(8),
+    parseAsInteger.withDefault(9),
   );
   const [submittedSearch, setSubmittedSearch] =
     useState<SeedMatchesRequest | null>(null);
@@ -140,6 +140,7 @@ export function SeedFinderForm() {
 
   const isReady = isDnaValid(sequence) && isSeedLengthSupported(seedLength);
   const results = resultsQuery.data;
+  const queryKmers = results?.kmers.join(", ") ?? "";
   const csvHref = results
     ? `data:text/csv;charset=utf-8,${encodeURIComponent(buildCsv(results))}`
     : "";
@@ -155,6 +156,51 @@ export function SeedFinderForm() {
           <CardDescription>
             PAM-proximal seed matches in TSS regions
           </CardDescription>
+          <div className="text-muted-foreground mt-4 space-y-3 text-left text-sm">
+            <p className="text-foreground font-semibold">
+              Cas9 guide RNA seed matches near TSS loci
+            </p>
+            <p>
+              Seed sequences are identified by searching +/-1,000 bp of
+              annotated transcription start sites (TSS) using the human
+              reference genome hg38. Only perfect matches are considered. Seed
+              matches are reported for MANE TSSs which are protein coding.
+              Seed-mediated off-target activity at non-protein coding
+              transcripts may also result in off-target effects. The seed
+              matches for a given seed match length include all seed matches
+              equal to or greater than that length (eg if a seed match is 13 bp,
+              it will also appear under 12 bp seed matches). All reported seed
+              matches are adjacent to an &apos;NGG&apos; Cas9 PAM sequence.
+            </p>
+            <p>
+              While off-target seed matches may apply to enzymatically active
+              Cas9, our analysis focused on seed-mediated off-targets
+              specifically with KRAB-dCas9 (CRISPRi), while other seed-mediated
+              off-target work has utilized CRISPRa systems.
+            </p>
+            <p>
+              You can read more in our preprint{" "}
+              <a
+                className="text-primary underline hover:no-underline"
+                href="https://biorxiv.org"
+                target="_blank"
+                rel="noreferrer"
+              >
+                here
+              </a>{" "}
+              (TODO: update when preprint out) and run the described method
+              yourself{" "}
+              <a
+                className="text-primary underline hover:no-underline"
+                href="https://github.com/AustinHartman/perturb_seed"
+                target="_blank"
+                rel="noreferrer"
+              >
+                here
+              </a>
+              .
+            </p>
+          </div>
         </CardHeader>
         <CardContent className="space-y-8">
           <form
@@ -183,6 +229,7 @@ export function SeedFinderForm() {
               onChange={(value) => {
                 void setSequence(value);
               }}
+              seedLength={seedLength}
             />
             <Button
               type="submit"
@@ -209,7 +256,8 @@ export function SeedFinderForm() {
                     {results.matches.length === 1 ? "" : "es"}
                   </p>
                   <p className="text-muted-foreground font-mono text-xs">
-                    Query k-mer: {results.kmer} from {results.sequence}
+                    Query k-mer{results.kmers.length === 1 ? "" : "s"}:{" "}
+                    {queryKmers} from {results.sequence}
                   </p>
                 </div>
                 <Button
@@ -220,7 +268,7 @@ export function SeedFinderForm() {
                 >
                   <a
                     href={csvHref}
-                    download={`seed-matches-k${results.minSeed}-${results.kmer}.csv`}
+                    download={`seed-matches-k${results.minSeed}-${results.kmers.join("-")}.csv`}
                   >
                     <DownloadIcon data-icon="inline-start" />
                     Download CSV
@@ -236,7 +284,7 @@ export function SeedFinderForm() {
                     <EmptyTitle>No seed matches</EmptyTitle>
                     <EmptyDescription>
                       No matches were found for the {results.minSeed}-bp genomic
-                      seed {results.kmer}.
+                      seed{results.kmers.length === 1 ? "" : "s"} {queryKmers}.
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -248,14 +296,16 @@ export function SeedFinderForm() {
                         Gene
                       </TableHead>
                       <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
-                        Genomic location
+                        Seed Match Locus
                       </TableHead>
                       <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
-                        Strand
+                        TSS Locus
                       </TableHead>
+
                       <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
                         Distance to TSS
                       </TableHead>
+
                       <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 rounded-tr-xl px-4 py-3 backdrop-blur">
                         UCSC
                       </TableHead>
@@ -269,15 +319,16 @@ export function SeedFinderForm() {
                         <TableCell className="px-4 py-3 font-medium">
                           {match.gene}
                         </TableCell>
-                        <TableCell className="px-4 py-3 font-mono text-xs">
+                        <TableCell className="px-4 py-3 font-mono text-xs tabular-nums">
                           {formatGenomicLocation(match, results.minSeed)}
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          {match.strand}
+                        <TableCell className="px-4 py-3 text-xs tabular-nums">
+                          {match.tss}
                         </TableCell>
                         <TableCell className="px-4 py-3 tabular-nums">
-                          {match.dist_to_tss}
+                          {Math.abs(match.dist_to_tss)}
                         </TableCell>
+
                         <TableCell className="px-4 py-3">
                           <a
                             className="text-primary inline-flex items-center gap-1 hover:underline"
