@@ -160,8 +160,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--write-workers",
         type=int,
-        default=1,
-        help="Number of shard files to gzip/write in parallel. Default: 1.",
+        default=10,
+        help="Number of shard files to gzip/write in parallel. Default: 10.",
     )
     return parser.parse_args()
 
