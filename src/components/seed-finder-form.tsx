@@ -21,6 +21,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
@@ -199,7 +200,8 @@ export function SeedFinderForm() {
             </div>
           )}
           {results && (
-            <section className="border-border/60 space-y-4 border-t pt-6">
+            <section className="flex flex-col gap-4">
+              <Separator />
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">
