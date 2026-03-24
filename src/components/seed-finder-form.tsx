@@ -54,7 +54,7 @@ function buildUcscLink(match: SeedMatch, k: number) {
   const end = match.pos + k + 100;
 
   return `https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=${encodeURIComponent(
-    `${match.chrom}:${start}-${end}`
+    `${match.chrom}:${start}-${end}`,
   )}`;
 }
 
@@ -111,11 +111,11 @@ async function searchSeedMatches({
 export function SeedFinderForm() {
   const [sequence, setSequence] = useQueryState(
     "sequence",
-    parseAsString.withDefault("")
+    parseAsString.withDefault(""),
   );
   const [seedLength, setSeedLength] = useQueryState(
     "seedLength",
-    parseAsInteger.withDefault(8)
+    parseAsInteger.withDefault(8),
   );
   const [submittedSearch, setSubmittedSearch] =
     useState<SeedMatchesRequest | null>(null);
@@ -147,7 +147,7 @@ export function SeedFinderForm() {
     <div className="flex flex-col items-center justify-center">
       <Card className="w-full max-w-5xl">
         <CardHeader className="text-center">
-          <CardDescription className="font-mono text-xs uppercase tracking-widest">
+          <CardDescription className="font-mono text-xs tracking-widest uppercase">
             CRISPR Analysis
           </CardDescription>
           <CardTitle className="text-2xl">Seed Finder Tool</CardTitle>
@@ -194,19 +194,19 @@ export function SeedFinderForm() {
             </Button>
           </form>
           {resultsQuery.isError && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border px-4 py-3 text-sm">
               {resultsQuery.error.message}
             </div>
           )}
           {results && (
-            <section className="space-y-4 border-t border-border/60 pt-6">
+            <section className="border-border/60 space-y-4 border-t pt-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">
                     {results.matches.length} seed match
                     {results.matches.length === 1 ? "" : "es"}
                   </p>
-                  <p className="font-mono text-xs text-muted-foreground">
+                  <p className="text-muted-foreground font-mono text-xs">
                     Query k-mer: {results.kmer} from {results.sequence}
                   </p>
                 </div>
@@ -226,7 +226,7 @@ export function SeedFinderForm() {
                 </Button>
               </div>
               {results.matches.length === 0 ? (
-                <Empty className="rounded-xl border border-border/60 bg-muted/20 py-10">
+                <Empty className="border-border/60 bg-muted/20 rounded-xl border py-10">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
                       <SearchIcon />
@@ -242,19 +242,19 @@ export function SeedFinderForm() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="rounded-tl-xl sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 rounded-tl-xl px-4 py-3 backdrop-blur">
                         Gene
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
                         Genomic location
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
                         Strand
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur">
                         Distance to TSS
                       </TableHead>
-                      <TableHead className="rounded-tr-xl sticky top-0 z-20 bg-accent px-4 py-3 backdrop-blur supports-backdrop-filter:bg-accent/95">
+                      <TableHead className="bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 rounded-tr-xl px-4 py-3 backdrop-blur">
                         UCSC
                       </TableHead>
                     </TableRow>
@@ -278,7 +278,7 @@ export function SeedFinderForm() {
                         </TableCell>
                         <TableCell className="px-4 py-3">
                           <a
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                            className="text-primary inline-flex items-center gap-1 hover:underline"
                             href={buildUcscLink(match, results.minSeed)}
                             target="_blank"
                             rel="noreferrer"

@@ -33,6 +33,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.7.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
@@ -40,6 +42,11 @@
     "sharp",
     "unrs-resolver"
   ],
+  "prettier": {
+    "plugins": [
+      "prettier-plugin-tailwindcss"
+    ]
+  },
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"

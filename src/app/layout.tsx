@@ -28,11 +28,11 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="m-auto max-w-4xl dark">
+      <body className="dark m-auto max-w-4xl">
         <Providers>
-          <main className="relative min-h-screen p-6 pt-20 md:p-12 md:pt-20">
+          <main className="relative p-6 pt-18 md:p-12 md:pt-18">
             {/* Decorative DNA strand accent */}
-            <div className="pointer-events-none absolute -left-32 top-1/5 h-96 w-64 rotate-12 opacity-[0.04]">
+            <div className="pointer-events-none absolute top-1/5 -left-32 h-96 w-64 rotate-12 opacity-[0.04]">
               <svg
                 viewBox="0 0 200 600"
                 fill="none"

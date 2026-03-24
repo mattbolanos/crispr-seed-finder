@@ -33,7 +33,7 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
     <div className="space-y-3">
       <div className="flex items-baseline justify-between">
         <Label htmlFor="dna-input">gRNA Sequence</Label>
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+        <span className="text-muted-foreground font-mono text-xs tabular-nums">
           {value.length}/{REQUIRED_LENGTH} bp
         </span>
       </div>
@@ -57,7 +57,7 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
             key={`${i}-${char}`}
             className={cn(
               "font-mono text-xs font-bold transition-all duration-200",
-              NUCLEOTIDE_COLORS[char] || "text-muted-foreground"
+              NUCLEOTIDE_COLORS[char] || "text-muted-foreground",
             )}
             style={{
               animationDelay: `${i * 30}ms`,
@@ -69,7 +69,7 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
         {Array.from({ length: REQUIRED_LENGTH - value.length }).map((_, i) => (
           <span
             key={`empty-${i.toString()}`}
-            className="font-mono text-xs text-muted-foreground/20"
+            className="text-muted-foreground/20 font-mono text-xs"
           >
             •
           </span>
@@ -78,7 +78,7 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
 
       <div className="h-4">
         {errorMessage && (
-          <p className="text-xs text-destructive/80">{errorMessage}</p>
+          <p className="text-destructive/80 text-xs">{errorMessage}</p>
         )}
       </div>
     </div>
