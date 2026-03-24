@@ -64,7 +64,7 @@ export function DnaInput({ value, onChange, seedLength }: DnaInputProps) {
           5&apos; —
         </span>
         {value.split("").map((char, i) => {
-          const isSeed = i < seedLength;
+          const isSeed = i >= REQUIRED_LENGTH - seedLength;
           return (
             <span
               key={`${i}-${char}`}
