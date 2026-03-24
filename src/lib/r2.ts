@@ -1,121 +1,118 @@
-import "server-only";
 import { gunzipSync } from "node:zlib";
+import { GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
+import {
+  buildSeedKmer,
+  type SeedMatch,
+  type SeedMatchesResponse,
+  SHARD_PREFIX_LENGTH,
+} from "@/lib/seed-search";
 
-const DEFAULT_SHARD_PREFIX_LENGTH = 5;
-const DNA_PREFIX_REGEX = /^[ACGT]+$/;
-const DEFAULT_R2_BASE_URL_ENV = "R2_KMER_INDEX_BASE_URL";
+type KmerShard = Record<string, SeedMatch[]>;
 
-export interface KmerMatch {
-  gene: string;
-  chrom: string;
-  pos: number;
-  strand: string;
-  tss: number;
-  dist_to_tss: number;
-}
+let r2Client: S3Client | undefined;
+const shardCache = new Map<string, Promise<KmerShard | null>>();
 
-export type KmerShard = Record<string, KmerMatch[]>;
+function getR2Client() {
+  if (r2Client) {
+    return r2Client;
+  }
 
-interface FetchKmerShardOptions {
-  baseUrl?: string;
-  signal?: AbortSignal;
-  cache?: RequestCache;
-}
+  const endpoint = process.env.R2_ENDPOINT_URL;
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const region = process.env.AWS_REGION ?? "auto";
 
-export function buildKmerShardPath(
-  seedLength: number,
-  prefix: string,
-  shardPrefixLength = DEFAULT_SHARD_PREFIX_LENGTH,
-) {
-  const normalizedPrefix = normalizeShardPrefix(
-    seedLength,
-    prefix,
-    shardPrefixLength,
-  );
-
-  return `k${seedLength}/${normalizedPrefix}.json.gz`;
-}
-
-export async function fetchKmerShard(
-  seedLength: number,
-  prefix: string,
-  options: FetchKmerShardOptions = {},
-): Promise<KmerShard | null> {
-  const baseUrl = options.baseUrl ?? process.env[DEFAULT_R2_BASE_URL_ENV];
-
-  if (!baseUrl) {
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
     throw new Error(
-      `Missing ${DEFAULT_R2_BASE_URL_ENV}. Set it to the public R2 base URL for the shard root.`,
+      "Missing R2 configuration. Expected R2_ENDPOINT_URL, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.",
     );
   }
 
-  const path = buildKmerShardPath(seedLength, prefix);
-  const url = new URL(path, withTrailingSlash(baseUrl));
-  const response = await fetch(url, {
-    signal: options.signal,
-    cache: options.cache ?? "force-cache",
+  r2Client = new S3Client({
+    endpoint,
+    region,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
   });
 
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch kmer shard ${path}: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const bytes = Buffer.from(await response.arrayBuffer());
-  return parseShardPayload(bytes);
+  return r2Client;
 }
 
-function normalizeShardPrefix(
+function getBucketName() {
+  const bucketName = process.env.R2_BUCKET_NAME;
+
+  if (!bucketName) {
+    throw new Error("Missing R2_BUCKET_NAME.");
+  }
+
+  return bucketName;
+}
+
+function getShardKey(seedLength: number, prefix5: string) {
+  return `k${seedLength}/${prefix5}.json.gz`;
+}
+
+async function fetchKmerShard(
   seedLength: number,
-  prefix: string,
-  shardPrefixLength: number,
-) {
-  if (!Number.isInteger(seedLength) || seedLength < 1) {
-    throw new Error(
-      `seedLength must be a positive integer. Received ${seedLength}.`,
-    );
+  prefix5: string,
+): Promise<KmerShard | null> {
+  const shardKey = getShardKey(seedLength, prefix5);
+  const cached = shardCache.get(shardKey);
+
+  if (cached) {
+    return cached;
   }
 
-  if (!Number.isInteger(shardPrefixLength) || shardPrefixLength < 1) {
-    throw new Error(
-      `shardPrefixLength must be a positive integer. Received ${shardPrefixLength}.`,
-    );
-  }
+  const promise = (async () => {
+    try {
+      const response = await getR2Client().send(
+        new GetObjectCommand({
+          Bucket: getBucketName(),
+          Key: shardKey,
+        }),
+      );
 
-  const normalized = prefix.trim().toUpperCase();
-  const expectedLength = Math.min(seedLength, shardPrefixLength);
+      if (!response.Body) {
+        return null;
+      }
 
-  if (normalized.length < expectedLength) {
-    throw new Error(
-      `prefix must contain at least ${expectedLength} bases for seedLength=${seedLength}.`,
-    );
-  }
+      const bytes = Buffer.from(await response.Body.transformToByteArray());
+      return JSON.parse(gunzipSync(bytes).toString("utf-8")) as KmerShard;
+    } catch (error) {
+      if (
+        error instanceof NoSuchKey ||
+        (error instanceof Error &&
+          "name" in error &&
+          error.name === "NoSuchKey")
+      ) {
+        return null;
+      }
 
-  const shardPrefix = normalized.slice(0, expectedLength);
-  if (!DNA_PREFIX_REGEX.test(shardPrefix)) {
-    throw new Error(
-      `prefix must only contain A, C, G, or T. Received ${JSON.stringify(prefix)}.`,
-    );
-  }
+      shardCache.delete(shardKey);
+      throw error;
+    }
+  })();
 
-  return shardPrefix;
+  shardCache.set(shardKey, promise);
+  return promise;
 }
 
-function parseShardPayload(payload: Buffer): KmerShard {
-  const rawText = payload.toString("utf-8");
+export async function findSeedMatches(
+  sequence: string,
+  minSeed: number,
+): Promise<SeedMatchesResponse> {
+  const kmer = buildSeedKmer(sequence, minSeed);
+  const prefix5 = kmer.slice(0, SHARD_PREFIX_LENGTH);
+  const shard = await fetchKmerShard(minSeed, prefix5);
 
-  try {
-    return JSON.parse(rawText) as KmerShard;
-  } catch {
-    return JSON.parse(gunzipSync(payload).toString("utf-8")) as KmerShard;
-  }
-}
-
-function withTrailingSlash(value: string) {
-  return value.endsWith("/") ? value : `${value}/`;
+  return {
+    sequence,
+    minSeed,
+    kmer,
+    prefix5,
+    matches: shard?.[kmer] ?? [],
+  };
 }

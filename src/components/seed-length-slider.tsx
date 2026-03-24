@@ -1,11 +1,9 @@
 "use client";
 
-import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-
-const MIN = 6;
-const MAX = 12;
+import { Slider } from "@/components/ui/slider";
+import { MAX_SEED_LENGTH, MIN_SEED_LENGTH } from "@/lib/seed-search";
 
 interface SeedLengthSliderProps {
   value: number;
@@ -21,15 +19,15 @@ export function SeedLengthSlider({ value, onChange }: SeedLengthSliderProps) {
       </div>
       <Slider
         id="seed-length"
-        min={MIN}
-        max={MAX}
+        min={MIN_SEED_LENGTH}
+        max={MAX_SEED_LENGTH}
         step={1}
         value={[value]}
         onValueChange={([v]) => onChange(v)}
       />
       <div className="flex justify-between text-xs tabular-nums">
-        <span>{MIN}</span>
-        <span>{MAX}</span>
+        <span>{MIN_SEED_LENGTH}</span>
+        <span>{MAX_SEED_LENGTH}</span>
       </div>
     </div>
   );

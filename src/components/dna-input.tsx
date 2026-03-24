@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DNA_REGEX, REQUIRED_LENGTH } from "@/lib/utils";
+import { DNA_REGEX, REQUIRED_LENGTH } from "@/lib/dna";
+import { cn } from "@/lib/utils";
 
 const NUCLEOTIDE_COLORS: Record<string, string> = {
   A: "text-emerald-400",
@@ -29,7 +30,7 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-baseline justify-between">
         <Label htmlFor="dna-input">gRNA Sequence</Label>
         <span className="font-mono text-xs tabular-nums text-muted-foreground">
@@ -49,13 +50,15 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
         aria-invalid={!!errorMessage}
       />
       {/* Colored nucleotide preview */}
+
       <div className="flex gap-[2px] px-1" aria-hidden>
         {value.split("").map((char, i) => (
           <span
             key={`${i}-${char}`}
-            className={`font-mono text-xs font-bold transition-all duration-200 ${
+            className={cn(
+              "font-mono text-xs font-bold transition-all duration-200",
               NUCLEOTIDE_COLORS[char] || "text-muted-foreground"
-            }`}
+            )}
             style={{
               animationDelay: `${i * 30}ms`,
             }}
@@ -65,13 +68,14 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
         ))}
         {Array.from({ length: REQUIRED_LENGTH - value.length }).map((_, i) => (
           <span
-            key={`empty-${i}`}
+            key={`empty-${i.toString()}`}
             className="font-mono text-xs text-muted-foreground/20"
           >
-            -
+            •
           </span>
         ))}
       </div>
+
       <div className="h-4">
         {errorMessage && (
           <p className="text-xs text-destructive/80">{errorMessage}</p>
