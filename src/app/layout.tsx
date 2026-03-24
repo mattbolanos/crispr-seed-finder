@@ -28,41 +28,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="dark m-auto max-w-4xl">
+      <body className="dark m-auto w-full max-w-3xl">
         <Providers>
           <main className="relative p-6 pt-18 md:p-12 md:pt-18">
-            {/* Decorative DNA strand accent */}
-            <div className="pointer-events-none absolute top-1/5 -left-32 h-96 w-64 rotate-12 opacity-[0.04]">
-              <svg
-                viewBox="0 0 200 600"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <title>DNA Strand</title>
-                <path
-                  d="M40 0C40 0 160 75 160 150C160 225 40 300 40 375C40 450 160 525 160 600"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  d="M160 0C160 0 40 75 40 150C40 225 160 300 160 375C160 450 40 525 40 600"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                {[75, 150, 225, 300, 375, 450, 525].map((y) => (
-                  <line
-                    key={y}
-                    x1="60"
-                    y1={y}
-                    x2="140"
-                    y2={y}
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    opacity="0.5"
-                  />
-                ))}
-              </svg>
-            </div>
             {children}
           </main>
         </Providers>

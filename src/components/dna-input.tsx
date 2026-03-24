@@ -71,7 +71,7 @@ export function DnaInput({ value, onChange }: DnaInputProps) {
             key={`empty-${i.toString()}`}
             className="text-muted-foreground/20 font-mono text-xs"
           >
-            •
+            -
           </span>
         ))}
       </div>
