@@ -68,7 +68,7 @@ export function DnaInput({
       <Input
         id="dna-input"
         placeholder="GGGCCGCCGCGGGCACGGAG or guide alias"
-        maxLength={80}
+        maxLength={isSequenceQuery ? 20 : 80}
         value={value}
         onChange={(e) => {
           const nextValue = e.target.value;
