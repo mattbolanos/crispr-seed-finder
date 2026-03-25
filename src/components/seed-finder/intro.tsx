@@ -55,6 +55,11 @@ function DescriptionParagraphs() {
         </a>
         .
       </p>
+      <p>
+        Accepted input formats are either a 20 basepair guide sequence where the last
+        n bases are treated as the PAM-adjacent seed or a preloaded CRISPRi Dolcetto
+        guide name such as dolcetto_seta_gapdh_g1 or dolcetto_setb_ms4a1_g3.
+      </p>
     </div>
   );
 }
@@ -62,18 +67,14 @@ function DescriptionParagraphs() {
 export function SeedFinderIntro() {
   return (
     <CardHeader className="text-center">
-      <CardDescription className="font-mono text-xs tracking-widest uppercase">
+      {/* <CardDescription className="font-mono text-xs tracking-widest uppercase">
         CRISPR Analysis
-      </CardDescription>
-      <CardTitle className="text-2xl">Seed Finder Tool</CardTitle>
+      </CardDescription> */}
+      <CardTitle className="text-2xl">Cas9 Guide Seed Finder Tool</CardTitle>
       <CardDescription>
         PAM-proximal seed matches in TSS regions
       </CardDescription>
       <div className="text-muted-foreground mt-4 flex flex-col gap-3 text-left text-sm">
-        <p className="text-foreground text-center font-semibold md:text-left">
-          Cas9 guide RNA seed matches near TSS loci
-        </p>
-
         {/* md+: always visible */}
         <div className="hidden md:block">
           <DescriptionParagraphs />
