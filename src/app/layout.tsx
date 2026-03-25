@@ -30,7 +30,7 @@ export default function RootLayout({
     >
       <body>
         <Providers>
-          <main className="mx-auto w-full max-w-3xl p-6 pt-8 md:p-12">
+          <main className="mx-auto w-full max-w-3xl p-4 pt-8 md:p-12">
             {children}
           </main>
         </Providers>
