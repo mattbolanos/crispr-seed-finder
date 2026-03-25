@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Seed Finder Tool — CRISPR",
+  title: "CRISPR-Cas9 guide seed finder",
   description: "PAM-proximal seed matches in TSS regions",
 };
 
