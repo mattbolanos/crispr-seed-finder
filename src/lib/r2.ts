@@ -11,6 +11,7 @@ type KmerShard = Record<string, SeedMatch[]>;
 
 let r2Client: S3Client | undefined;
 const shardCache = new Map<string, Promise<KmerShard | null>>();
+const textObjectCache = new Map<string, Promise<string | null>>();
 
 function getR2Client() {
   if (r2Client) {
@@ -53,6 +54,47 @@ function getBucketName() {
 
 function getShardKey(seedLength: number, prefix5: string) {
   return `k${seedLength}/${prefix5}.json.gz`;
+}
+
+async function fetchTextObject(key: string): Promise<string | null> {
+  const cached = textObjectCache.get(key);
+
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    try {
+      const response = await getR2Client().send(
+        new GetObjectCommand({
+          Bucket: getBucketName(),
+          Key: key,
+        }),
+      );
+
+      if (!response.Body) {
+        return null;
+      }
+
+      const bytes = Buffer.from(await response.Body.transformToByteArray());
+      return bytes.toString("utf-8");
+    } catch (error) {
+      if (
+        error instanceof NoSuchKey ||
+        (error instanceof Error &&
+          "name" in error &&
+          error.name === "NoSuchKey")
+      ) {
+        return null;
+      }
+
+      textObjectCache.delete(key);
+      throw error;
+    }
+  })();
+
+  textObjectCache.set(key, promise);
+  return promise;
 }
 
 async function fetchKmerShard(
@@ -142,4 +184,8 @@ export async function findSeedMatches(
     prefixes5,
     matches,
   };
+}
+
+export async function fetchR2TextFile(key: string) {
+  return fetchTextObject(key);
 }

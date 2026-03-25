@@ -1,8 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { parseAsInteger, parseAsString, useQueryState } from "nuqs";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import {
   type SearchHistoryEntry,
   type SeedMatchesRequest,
@@ -12,9 +11,11 @@ import { SeedFinderIntro } from "@/components/seed-finder/intro";
 import { SeedFinderResults } from "@/components/seed-finder/results";
 import { SeedFinderSearchControls } from "@/components/seed-finder/search-controls";
 import { Card, CardContent } from "@/components/ui/card";
+import type { GuideHandler } from "@/lib/guide-library-manifest";
+import { canonicalizeGuideQuery } from "@/lib/guide-query";
 import {
-  isDnaValid,
   isSeedLengthSupported,
+  isSequenceSearchable,
   type SeedMatchesResponse,
 } from "@/lib/seed-search";
 
@@ -50,86 +51,71 @@ async function searchSeedMatches({
 }
 
 interface SeedFinderFormProps {
-  restoredEntry: SearchHistoryEntry | null;
+  guideHandlers: GuideHandler[];
+  query: string;
+  restoredResults: SeedMatchesResponse | null;
+  seedLength: number;
+  onQueryChange: (value: string) => void;
+  onSeedLengthChange: (value: number) => void;
   onSearchCompleted: (entry: SearchHistoryEntry) => void;
 }
 
 export function SeedFinderForm({
-  restoredEntry,
+  guideHandlers,
+  query,
+  restoredResults,
+  seedLength,
+  onQueryChange,
+  onSeedLengthChange,
   onSearchCompleted,
 }: SeedFinderFormProps) {
-  const [sequence, setSequence] = useQueryState(
-    "sequence",
-    parseAsString.withDefault(""),
-  );
-  const [seedLength, setSeedLength] = useQueryState(
-    "seedLength",
-    parseAsInteger.withDefault(9),
-  );
-  const [submittedSearch, setSubmittedSearch] =
-    useState<SubmittedSearch | null>(null);
   const [displayedResults, setDisplayedResults] =
-    useState<SeedMatchesResponse | null>(restoredEntry?.response ?? null);
-  const completedRunIdsRef = useRef<Set<string>>(new Set());
+    useState<SeedMatchesResponse | null>(restoredResults);
+  const latestSubmittedRunIdRef = useRef<string | null>(null);
+  const guideLookup = useMemo(
+    () =>
+      new Map(
+        guideHandlers.map((guideHandler) => [
+          canonicalizeGuideQuery(guideHandler.alias),
+          guideHandler.sequence,
+        ]),
+      ),
+    [guideHandlers],
+  );
+  const resolvedGuideSequence =
+    guideLookup.get(canonicalizeGuideQuery(query)) ?? null;
+  const isValidSequenceQuery = isSequenceSearchable(query);
+  const isValidGuideQuery = resolvedGuideSequence !== null;
 
-  const resultsQuery = useQuery({
-    queryKey: [
-      "seed-matches",
-      submittedSearch?.sequence ?? null,
-      submittedSearch?.minSeed ?? null,
-      submittedSearch?.runId ?? null,
-    ],
-    queryFn: () => {
-      if (!submittedSearch) {
-        throw new Error("No search has been submitted.");
+  const searchMutation = useMutation({
+    mutationFn: ({ sequence, minSeed }: SubmittedSearch) => {
+      return searchSeedMatches({ sequence, minSeed });
+    },
+    onSuccess: (response, submittedSearch) => {
+      if (latestSubmittedRunIdRef.current !== submittedSearch.runId) {
+        return;
       }
 
-      return searchSeedMatches(submittedSearch);
+      const entry: SearchHistoryEntry = {
+        id: submittedSearch.runId,
+        createdAt: new Date().toISOString(),
+        request: {
+          sequence: submittedSearch.sequence,
+          minSeed: submittedSearch.minSeed,
+        },
+        response,
+      };
+
+      upsertSearchHistoryEntry(entry);
+      setDisplayedResults(response);
+      onSearchCompleted(entry);
     },
-    enabled: submittedSearch !== null,
-    staleTime: 5 * 60 * 1000,
   });
 
-  useEffect(() => {
-    if (!submittedSearch || !resultsQuery.data) {
-      return;
-    }
-
-    if (completedRunIdsRef.current.has(submittedSearch.runId)) {
-      return;
-    }
-
-    const entry: SearchHistoryEntry = {
-      id: submittedSearch.runId,
-      createdAt: new Date().toISOString(),
-      request: {
-        sequence: submittedSearch.sequence,
-        minSeed: submittedSearch.minSeed,
-      },
-      response: resultsQuery.data,
-    };
-
-    completedRunIdsRef.current.add(submittedSearch.runId);
-    upsertSearchHistoryEntry(entry);
-    setDisplayedResults(resultsQuery.data);
-    onSearchCompleted(entry);
-  }, [onSearchCompleted, resultsQuery.data, submittedSearch]);
-
-  useEffect(() => {
-    if (!restoredEntry) {
-      return;
-    }
-
-    void setSequence(restoredEntry.request.sequence);
-    void setSeedLength(restoredEntry.request.minSeed);
-    setSubmittedSearch(null);
-    setDisplayedResults(restoredEntry.response);
-  }, [restoredEntry, setSeedLength, setSequence]);
-
-  const isReady = isDnaValid(sequence) && isSeedLengthSupported(seedLength);
-  const results = submittedSearch
-    ? (resultsQuery.data ?? displayedResults)
-    : displayedResults;
+  const isReady =
+    (isValidSequenceQuery || isValidGuideQuery) &&
+    isSeedLengthSupported(seedLength);
+  const results = displayedResults;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,12 +125,16 @@ export function SeedFinderForm({
       return;
     }
 
-    setDisplayedResults(null);
-    setSubmittedSearch({
-      sequence,
+    const submittedSearch = {
+      sequence: query,
       minSeed: seedLength,
       runId: createSearchRunId(),
-    });
+    };
+
+    latestSubmittedRunIdRef.current = submittedSearch.runId;
+    searchMutation.reset();
+    setDisplayedResults(null);
+    searchMutation.mutate(submittedSearch);
   }
 
   return (
@@ -154,20 +144,17 @@ export function SeedFinderForm({
         <CardContent className="space-y-6">
           <SeedFinderSearchControls
             isReady={isReady}
-            isSearching={resultsQuery.isFetching}
+            isSearching={searchMutation.isPending}
+            resolvedGuideSequence={resolvedGuideSequence}
             seedLength={seedLength}
-            sequence={sequence}
-            onSeedLengthChange={(value) => {
-              void setSeedLength(value);
-            }}
-            onSequenceChange={(value) => {
-              void setSequence(value);
-            }}
+            query={query}
+            onSeedLengthChange={onSeedLengthChange}
+            onQueryChange={onQueryChange}
             onSubmit={handleSubmit}
           />
-          {resultsQuery.isError && (
+          {searchMutation.isError && (
             <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border px-4 py-3 text-sm">
-              {resultsQuery.error.message}
+              {searchMutation.error.message}
             </div>
           )}
           <SeedFinderResults results={results} />

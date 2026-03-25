@@ -10,28 +10,31 @@ import { Spinner } from "@/components/ui/spinner";
 interface SeedFinderSearchControlsProps {
   isReady: boolean;
   isSearching: boolean;
+  resolvedGuideSequence: string | null;
   seedLength: number;
-  sequence: string;
+  query: string;
   onSeedLengthChange: (value: number) => void;
-  onSequenceChange: (value: string) => void;
+  onQueryChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 export function SeedFinderSearchControls({
   isReady,
   isSearching,
+  resolvedGuideSequence,
   seedLength,
-  sequence,
+  query,
   onSeedLengthChange,
-  onSequenceChange,
+  onQueryChange,
   onSubmit,
 }: SeedFinderSearchControlsProps) {
   return (
     <form className="space-y-3" onSubmit={onSubmit}>
       <SeedLengthSlider value={seedLength} onChange={onSeedLengthChange} />
       <DnaInput
-        value={sequence}
-        onChange={onSequenceChange}
+        resolvedGuideSequence={resolvedGuideSequence}
+        value={query}
+        onChange={onQueryChange}
         seedLength={seedLength}
       />
       <Button
