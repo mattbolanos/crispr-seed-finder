@@ -44,7 +44,7 @@ function DescriptionParagraphs() {
         >
           here
         </a>{" "}
-        (TODO: update when preprint out) and run the described method yourself{" "}
+        and run the described method yourself{" "}
         <a
           className="text-primary underline hover:no-underline"
           href="https://github.com/AustinHartman/perturb_seed"
