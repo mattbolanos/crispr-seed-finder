@@ -38,7 +38,7 @@ function DescriptionParagraphs() {
         You can read more in our preprint{" "}
         <a
           className="text-primary underline hover:no-underline"
-          href="https://biorxiv.org"
+          href="https://www.biorxiv.org/content/10.64898/2026.03.27.714658v2"
           target="_blank"
           rel="noreferrer"
         >
