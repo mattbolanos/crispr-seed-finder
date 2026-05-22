@@ -9,6 +9,11 @@ import {
 } from "@/lib/seed-search";
 
 type KmerShard = Record<string, SeedMatch[]>;
+type SeedKmerOrientation = "direct" | "reverse-complement";
+type SeedKmerQuery = {
+  kmer: string;
+  orientations: SeedKmerOrientation[];
+};
 
 let r2Client: S3Client | undefined;
 const shardCache = new Map<string, Promise<KmerShard | null>>();
@@ -154,24 +159,70 @@ function getMatchKey(match: SeedMatch) {
   ].join(":");
 }
 
+function buildSeedKmerQueries(sequence: string, minSeed: number) {
+  const kmers = buildSeedKmers(sequence, minSeed);
+  const directKmer = sequence.slice(-minSeed);
+
+  return kmers.map<SeedKmerQuery>((kmer) => ({
+    kmer,
+    orientations: [
+      ...(kmer === directKmer ? (["direct"] as const) : []),
+      ...(kmer !== directKmer || kmers.length === 1
+        ? (["reverse-complement"] as const)
+        : []),
+    ],
+  }));
+}
+
+function getSeedAlignmentKey(
+  match: SeedMatch,
+  seedLength: number,
+  orientation: SeedKmerOrientation,
+) {
+  const stablePosition =
+    orientation === "direct" ? match.pos + seedLength : match.pos;
+
+  return [
+    orientation,
+    match.gene,
+    match.chrom,
+    stablePosition,
+    match.strand,
+    match.tss,
+  ].join(":");
+}
+
 export async function findSeedMatches(
   sequence: string,
   minSeed: number,
 ): Promise<SeedMatchesResponse> {
   const kmers = buildSeedKmers(sequence, minSeed);
+  const kmerQueries = buildSeedKmerQueries(sequence, minSeed);
   const prefixes5 = kmers.map((kmer) => kmer.slice(0, SHARD_PREFIX_LENGTH));
   const shardEntries = await Promise.all(
-    kmers.map(async (kmer, index) => ({
-      kmer,
-      shard: await fetchKmerShard(minSeed, prefixes5[index]),
+    kmerQueries.map(async (query) => ({
+      ...query,
+      shard: await fetchKmerShard(
+        minSeed,
+        query.kmer.slice(0, SHARD_PREFIX_LENGTH),
+      ),
     })),
   );
   const seenMatches = new Set<string>();
+  const matchAlignmentKeys = new Map<string, Set<string>>();
   const matches: SeedMatch[] = [];
 
-  for (const { kmer, shard } of shardEntries) {
+  for (const { kmer, orientations, shard } of shardEntries) {
     for (const match of shard?.[kmer] ?? []) {
       const matchKey = getMatchKey(match);
+      const alignmentKeys =
+        matchAlignmentKeys.get(matchKey) ?? new Set<string>();
+
+      for (const orientation of orientations) {
+        alignmentKeys.add(getSeedAlignmentKey(match, minSeed, orientation));
+      }
+
+      matchAlignmentKeys.set(matchKey, alignmentKeys);
 
       if (seenMatches.has(matchKey)) {
         continue;
@@ -195,30 +246,35 @@ export async function findSeedMatches(
       seedLength <= MAX_SEED_LENGTH && activeMatchKeys.size > 0;
       seedLength += 1
     ) {
-      const longerKmers = buildSeedKmers(sequence, seedLength);
+      const longerKmerQueries = buildSeedKmerQueries(sequence, seedLength);
       const longerShardEntries = await Promise.all(
-        longerKmers.map(async (kmer) => ({
-          kmer,
+        longerKmerQueries.map(async (query) => ({
+          ...query,
           shard: await fetchKmerShard(
             seedLength,
-            kmer.slice(0, SHARD_PREFIX_LENGTH),
+            query.kmer.slice(0, SHARD_PREFIX_LENGTH),
           ),
         })),
       );
-      const longerMatchKeys = new Set<string>();
+      const longerAlignmentKeys = new Set<string>();
 
-      for (const { kmer, shard } of longerShardEntries) {
+      for (const { kmer, orientations, shard } of longerShardEntries) {
         for (const match of shard?.[kmer] ?? []) {
-          const matchKey = getMatchKey(match);
-
-          if (activeMatchKeys.has(matchKey)) {
-            longerMatchKeys.add(matchKey);
+          for (const orientation of orientations) {
+            longerAlignmentKeys.add(
+              getSeedAlignmentKey(match, seedLength, orientation),
+            );
           }
         }
       }
 
       for (const matchKey of Array.from(activeMatchKeys)) {
-        if (longerMatchKeys.has(matchKey)) {
+        const alignmentKeys = matchAlignmentKeys.get(matchKey) ?? new Set();
+        const hasLongerMatch = Array.from(alignmentKeys).some((alignmentKey) =>
+          longerAlignmentKeys.has(alignmentKey),
+        );
+
+        if (hasLongerMatch) {
           matchLengths.set(matchKey, seedLength);
         } else {
           activeMatchKeys.delete(matchKey);
