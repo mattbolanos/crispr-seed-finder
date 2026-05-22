@@ -11,6 +11,7 @@ export interface SeedMatch {
   strand: "+" | "-" | string;
   tss: number;
   dist_to_tss: number;
+  seed_match_length?: number;
 }
 
 export interface SeedMatchesResponse {

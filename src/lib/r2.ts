@@ -2,6 +2,7 @@ import { gunzipSync } from "node:zlib";
 import { GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
 import {
   buildSeedKmers,
+  MAX_SEED_LENGTH,
   type SeedMatch,
   type SeedMatchesResponse,
   SHARD_PREFIX_LENGTH,
@@ -142,6 +143,17 @@ async function fetchKmerShard(
   return promise;
 }
 
+function getMatchKey(match: SeedMatch) {
+  return [
+    match.gene,
+    match.chrom,
+    match.pos,
+    match.strand,
+    match.tss,
+    match.dist_to_tss,
+  ].join(":");
+}
+
 export async function findSeedMatches(
   sequence: string,
   minSeed: number,
@@ -159,14 +171,7 @@ export async function findSeedMatches(
 
   for (const { kmer, shard } of shardEntries) {
     for (const match of shard?.[kmer] ?? []) {
-      const matchKey = [
-        match.gene,
-        match.chrom,
-        match.pos,
-        match.strand,
-        match.tss,
-        match.dist_to_tss,
-      ].join(":");
+      const matchKey = getMatchKey(match);
 
       if (seenMatches.has(matchKey)) {
         continue;
@@ -177,12 +182,67 @@ export async function findSeedMatches(
     }
   }
 
+  let seedMatches = matches;
+
+  if (matches.length > 0 && minSeed < MAX_SEED_LENGTH) {
+    const matchLengths = new Map<string, number>(
+      matches.map((match) => [getMatchKey(match), minSeed]),
+    );
+    const activeMatchKeys = new Set(matchLengths.keys());
+
+    for (
+      let seedLength = minSeed + 1;
+      seedLength <= MAX_SEED_LENGTH && activeMatchKeys.size > 0;
+      seedLength += 1
+    ) {
+      const longerKmers = buildSeedKmers(sequence, seedLength);
+      const longerShardEntries = await Promise.all(
+        longerKmers.map(async (kmer) => ({
+          kmer,
+          shard: await fetchKmerShard(
+            seedLength,
+            kmer.slice(0, SHARD_PREFIX_LENGTH),
+          ),
+        })),
+      );
+      const longerMatchKeys = new Set<string>();
+
+      for (const { kmer, shard } of longerShardEntries) {
+        for (const match of shard?.[kmer] ?? []) {
+          const matchKey = getMatchKey(match);
+
+          if (activeMatchKeys.has(matchKey)) {
+            longerMatchKeys.add(matchKey);
+          }
+        }
+      }
+
+      for (const matchKey of Array.from(activeMatchKeys)) {
+        if (longerMatchKeys.has(matchKey)) {
+          matchLengths.set(matchKey, seedLength);
+        } else {
+          activeMatchKeys.delete(matchKey);
+        }
+      }
+    }
+
+    seedMatches = matches.map((match) => ({
+      ...match,
+      seed_match_length: matchLengths.get(getMatchKey(match)) ?? minSeed,
+    }));
+  } else {
+    seedMatches = matches.map((match) => ({
+      ...match,
+      seed_match_length: minSeed,
+    }));
+  }
+
   return {
     sequence,
     minSeed,
     kmers,
     prefixes5,
-    matches,
+    matches: seedMatches,
   };
 }
 

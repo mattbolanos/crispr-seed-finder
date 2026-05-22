@@ -46,6 +46,14 @@ export const seedMatchColumns: SeedMatchColumn[] = [
     getCsvValue: (match, minSeed) => formatGenomicLocation(match, minSeed),
   },
   {
+    header: "Seed Match Length",
+    headerClassName:
+      "bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur",
+    cellClassName: "px-4 py-3 tabular-nums",
+    renderCell: (match, minSeed) => match.seed_match_length ?? minSeed,
+    getCsvValue: (match, minSeed) => match.seed_match_length ?? minSeed,
+  },
+  {
     header: "TSS Locus",
     headerClassName:
       "bg-accent supports-backdrop-filter:bg-accent/95 sticky top-0 z-20 px-4 py-3 backdrop-blur",
