@@ -5,7 +5,12 @@ import {
   resolveGuideSequence,
 } from "@/lib/guide-library";
 import { findSeedMatches } from "@/lib/r2";
-import { isSeedLengthSupported, normalizeSequence } from "@/lib/seed-search";
+import {
+  isSeedLengthSupported,
+  MAX_SEED_LENGTH,
+  MIN_SEED_LENGTH,
+  normalizeSequence,
+} from "@/lib/seed-search";
 
 export const runtime = "nodejs";
 
@@ -39,7 +44,9 @@ export async function POST(request: Request) {
 
   if (!isSeedLengthSupported(minSeed)) {
     return NextResponse.json(
-      { error: "minSeed must be an integer between 6 and 12." },
+      {
+        error: `minSeed must be an integer between ${MIN_SEED_LENGTH} and ${MAX_SEED_LENGTH}.`,
+      },
       { status: 400 },
     );
   }

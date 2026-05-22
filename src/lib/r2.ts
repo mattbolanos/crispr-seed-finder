@@ -179,8 +179,12 @@ function getSeedAlignmentKey(
   seedLength: number,
   orientation: SeedKmerOrientation,
 ) {
-  const stablePosition =
-    orientation === "direct" ? match.pos + seedLength : match.pos;
+  const matchesForwardGenomicEnd =
+    (orientation === "direct" && match.strand === "+") ||
+    (orientation === "reverse-complement" && match.strand === "-");
+  const stablePosition = matchesForwardGenomicEnd
+    ? match.pos + seedLength
+    : match.pos;
 
   return [
     orientation,
